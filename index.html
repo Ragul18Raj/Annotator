@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gamaka Annotator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◠</span>
+      <div>
+        <h1>Gamaka Annotator</h1>
+        <p class="sub">Mark gamakas on a Carnatic recording and export them to Excel</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="btn primary" for="fileInput">⬆ Upload song</label>
+      <input id="fileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac" hidden />
+      <button id="exportBtn" class="btn" disabled>⬇ Export Excel (this song)</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Empty state -->
+    <section id="dropZone" class="drop-zone">
+      <div class="drop-inner">
+        <div class="drop-icon">♪</div>
+        <h2>Drop a song here</h2>
+        <p>or use <strong>Upload song</strong> above (mp3, wav, m4a, flac, ogg)</p>
+      </div>
+    </section>
+
+    <!-- Editor -->
+    <section id="editor" class="editor" hidden>
+      <div class="song-bar">
+        <label class="field grow">
+          <span>Song name</span>
+          <input id="songName" type="text" placeholder="Song name" />
+        </label>
+        <div class="clock">
+          <span id="curTime">0:00.00</span>
+          <span class="muted">/</span>
+          <span id="totTime" class="muted">0:00.00</span>
+        </div>
+      </div>
+
+      <div class="wave-card">
+        <div id="timeline"></div>
+        <div id="waveform"></div>
+
+        <div class="pitch-bar">
+          <span class="lane-label">Pitch contour (svaras relative to Sa)</span>
+          <span id="pitchStatus" class="pitch-status"></span>
+          <div class="pitch-tools">
+            <label class="inline" title="The singer's Sa (shruti)">Sa
+              <select id="saNote"></select>
+              <input id="saHz" type="number" min="60" max="600" step="0.1" /> Hz
+            </label>
+            <button id="saAuto" class="btn small" title="Guess Sa from the recording">Auto-detect Sa</button>
+            <label class="inline" title="Higher hides more uncertain pitch points (helps with violin, mridangam and tanpura)">Clean-up
+              <input id="strictness" type="range" min="0" max="100" value="50" />
+            </label>
+            <label class="btn small" for="vocalInput" title="Optional: a vocal-only version of this song (e.g. from Demucs / Ultimate Vocal Remover) gives a much cleaner pitch line">🎤 Vocal track for pitch…</label>
+            <input id="vocalInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac" hidden />
+          </div>
+        </div>
+        <div id="pitchWrap" class="pitch-wrap">
+          <canvas id="pitchCanvas"></canvas>
+          <div id="pitchHead" class="pitch-playhead"></div>
+          <div id="pitchReadout" class="pitch-readout" hidden></div>
+        </div>
+        <div class="lane-label">Gamaka names ↓ (type under each annotated section)</div>
+        <div id="lane" class="lane"><div id="laneInner" class="lane-inner"></div></div>
+        <div class="seek-row">
+          <span id="seekCur" class="mono small">0:00.00</span>
+          <input id="seek" type="range" min="0" max="1" step="0.01" value="0" title="Drag to move through the song" />
+          <span id="seekTot" class="mono small muted">0:00.00</span>
+          <label class="inline vol" title="Volume">🔊
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1" />
+          </label>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="group">
+          <button id="playBtn" class="btn primary wide" title="Play / pause without marking">▶ Play</button>
+          <button id="markBtn" class="btn" title="Add a boundary at the playhead (M)">┃ Mark</button>
+          <button id="undoBtn" class="btn" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+          <button id="redoBtn" class="btn" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
+          <button id="clearBtn" class="btn danger-ghost" title="Remove every boundary for this song">Clear all</button>
+        </div>
+        <div class="group">
+          <label class="inline">Speed
+            <select id="speed">
+              <option value="0.5">0.5×</option>
+              <option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.25">1.25×</option>
+            </select>
+          </label>
+          <label class="inline">Zoom
+            <input id="zoom" type="range" min="0" max="400" value="0" />
+          </label>
+          <label class="inline check" title="When on, pausing with Space drops a boundary">
+            <input id="markOnPause" type="checkbox" checked /> Space-pause marks
+          </label>
+        </div>
+      </div>
+
+      <div class="hints">
+        <span><kbd>Space</kbd> play / pause + mark boundary</span>
+        <span><kbd>M</kbd> mark without pausing</span>
+        <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo</span>
+        <span><kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</span>
+        <span><kbd>←</kbd>/<kbd>→</kbd> seek 2s</span>
+        <span>Click or drag on the waveform, pitch line or seek bar to move the playhead</span>
+        <span>Drag a boundary line to fine-tune it, double-click it to delete</span>
+        <span><kbd>Enter</kbd> finish typing a name</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Annotated gamakas <span id="segCount" class="pill">0</span></h3>
+          <label class="inline check"><input id="includeBlank" type="checkbox" /> Include unnamed sections in Excel</label>
+        </div>
+        <p class="muted small">Every section between two boundaries is a gamaka. Leave the name empty for sections you don't want exported.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Start</th><th>End</th><th>Dur (s)</th><th>Gamaka type</th><th></th></tr>
+            </thead>
+            <tbody id="segBody"></tbody>
+          </table>
+          <div id="segEmpty" class="empty-row">No sections yet. Play the song and press <kbd>Space</kbd> at the start and end of each gamaka.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Library of songs annotated in this browser -->
+    <section class="panel library">
+      <div class="panel-head">
+        <h3>Songs annotated in this browser</h3>
+        <button id="exportAllBtn" class="btn" disabled>⬇ Export all songs (one workbook)</button>
+      </div>
+      <p class="muted small">Annotations are autosaved here. Re-upload the same audio file to continue where you left off.</p>
+      <ul id="library" class="lib-list"></ul>
+    </section>
+  </main>
+
+  <datalist id="gamakaList"></datalist>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/wavesurfer.js@7.8.6/dist/wavesurfer.min.js"></script>
+  <script src="https://unpkg.com/wavesurfer.js@7.8.6/dist/plugins/regions.min.js"></script>
+  <script src="https://unpkg.com/wavesurfer.js@7.8.6/dist/plugins/timeline.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="pitch.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
